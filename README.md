@@ -1,84 +1,201 @@
-# JurystAi - LegalTech SaaS для Казахстана
+# JurystAi - LegalTech SaaS for Kazakhstan
 
-## 🎯 Что это?
+**AI-powered RAG system for Kazakhstan legislation** with comprehensive legal code search, JWT authentication, and production-ready deployment infrastructure.
 
-LegalTech платформа с RAG системой для поиска по Нормативно-Правовым Актам (НПА) Республики Казахстан.
+## Project Overview
 
-**Функциональность:**
-- 🔍 RAG-поиск по 9 основным кодексам РК
-- 📄 Загрузка и анализ документов
-- 🎙️ Обработка аудио (транскрипция)
-- ⚖️ Помощник по контрактам (Contract Redlining)
-- 💰 Интеграция платежей (Kaspi Pay, LiqPay)
+JurystAi is a next-generation LegalTech platform that indexes all 9 Kazakhstan legal codes and provides intelligent search.
 
-## 🚀 Быстрый старт
+### 9 Kazakhstan Legal Codes Indexed
+1. Constitution of Kazakhstan
+2. Criminal Code
+3. Civil Code
+4. Code of Criminal Procedure
+5. Code of Civil Procedure
+6. Labour Code
+7. Family Code
+8. Administrative Code
+9. Tax Code
 
-### Локальное разработка (Docker Compose)
+## Tech Stack
 
+**Backend:**
+- FastAPI 0.104+ (Python 3.11)
+- SQLAlchemy ORM
+- PostgreSQL/Supabase
+- Alembic migrations
+- PyJWT with refresh tokens
+- Groq AI + Google GenAI
+
+**Frontend:**
+- Next.js 14 with TypeScript
+- React 18
+- TailwindCSS
+- Supabase client
+
+**Infrastructure:**
+- Railway (Backend deployment)
+- Vercel (Frontend deployment)
+- GitHub Actions (CI/CD)
+- Docker & Docker Compose (Local dev)
+
+## Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Docker & Docker Compose
+- PostgreSQL 14+ (or use Supabase)
+- Git
+
+## Local Development Setup
+
+### 1. Clone Repository
 ```bash
 git clone https://github.com/K09-0/juristai.git
 cd juristai
-
-cp backend/.env.example backend/.env
-
-docker-compose up --build
-
-# Проверяешь API
-curl http://localhost:8000/health
-curl http://localhost:3000
 ```
 
-### Production деплой на Railway + Vercel
+### 2. Copy Environment Variables
+```bash
+cp .env.example .env
+```
+
+### 3. Run with Docker Compose
+```bash
+docker-compose up --build
+```
+
+This starts:
+- PostgreSQL on localhost:5432
+- Backend on http://localhost:8000
+- Frontend on http://localhost:3000
+
+### 4. Manual Setup (Without Docker)
 
 **Backend:**
-1. https://railway.app → New Project → Deploy from GitHub
-2. Выбери K09-0/juristai
-3. Добавь Environment Variables (см. README в репо)
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
+```
 
 **Frontend:**
-1. https://vercel.com → New Project → Import Git Repository
-2. Выбери K09-0/juristai
-3. Environment: `NEXT_PUBLIC_API_URL=https://api.juristai.site`
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-**DNS:**
-1. https://cp.domainnameapi.com/login
-2. Добавь CNAME: api → railway-domain
-3. Добавь CNAME: www → vercel-domain
+## Configuration
 
-## 📡 API Endpoints
+### Backend Environment Variables
+```env
+DATABASE_URL=postgresql://user:pass@host/db
+GROQ_API_KEY=<your-groq-api-key>
+GOOGLE_GENAI_API_KEY=<your-google-genai-key>
+SECRET_KEY=<your-jwt-secret-key>
+ENV=development|production
+DEBUG=true|false
+PORT=8000
+CORS_ORIGINS=http://localhost:3000,https://yourdomain.com
+```
 
-### Authentication
-- `POST /auth/register` - Регистрация
-- `POST /auth/login` - Вход (access & refresh tokens)
-- `POST /auth/refresh` - Обновление токена
+### Database Migrations
+```bash
+alembic revision --autogenerate -m "message"
+alembic upgrade head
+alembic downgrade -1
+```
 
-### Health & Docs
-- `GET /health` - Проверка статуса
-- `GET /docs` - Swagger документация
-- `GET /redoc` - ReDoc документация
+## API Documentation
 
-## 🔐 Безопасность
+### Health Check
+```bash
+curl http://localhost:8000/health
+```
 
-- ✅ JWT с refresh tokens (access 30 мин, refresh 7 дней)
-- ✅ Bcrypt для паролей
-- ✅ CORS настроена
-- ✅ SQL-injection защита
-- ✅ HTTPS ready
+### Available Endpoints
 
-## 🛠️ Tech Stack
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /health | Health check |
+| GET | /status | Detailed status |
+| GET | /docs | Swagger UI |
+| POST | /auth/register | Register user |
+| POST | /auth/login | Login |
+| POST | /auth/refresh | Refresh token |
+| GET | /legislation/codes | List codes |
+| GET | /legislation/search | Search legislation |
+| POST | /admin/index-legislation | Trigger indexing |
 
-**Backend:** FastAPI 0.109.0, SQLAlchemy 2.0, Alembic, Supabase, Groq, Google GenAI, Sentence Transformers
+## Production Deployment
 
-**Frontend:** Next.js 14, React 18, TailwindCSS 3.4, Lucide Icons, Supabase Client, Axios
+### Deploy Backend to Railway
 
-## 📋 Статус
+1. Connect GitHub account to Railway
+2. Create project and select repository
+3. Add environment variables in Railway dashboard
+4. Railway auto-deploys on push to main
 
-| Component | Статус | URL |
-|-----------|--------|-----|
-| Backend | ✅ Railway | https://api.juristai.site |
-| Frontend | 🔄 Vercel | https://juristai.site |
-| Database | ✅ Supabase | aatifhldykfrsozjxigl.supabase.co |
+### Deploy Frontend to Vercel
+
+1. Import GitHub repo to Vercel
+2. Configure build: Framework = Next.js, Root = frontend
+3. Add environment variables
+4. Vercel auto-deploys on push to main
+
+### Configure DNS
+
+For juristai.site:
+
+**API (api.juristai.site):**
+- Type: CNAME
+- Value: railway-domain.railway.app
+
+**Frontend (www.juristai.site):**
+- Type: CNAME
+- Value: cname.vercel-dns.com
+
+## Security
+
+- JWT tokens: Access 30min, Refresh 7 days
+- Password: bcrypt with 12 salt rounds
+- CORS: Production domains only
+- Database: SSL/TLS in production
+- Audit logging: All user actions tracked
+
+## Project Structure
+
+```
+juristai/
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── models.py
+│   │   └── auth/jwt_auth.py
+│   ├── alembic/
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── next.config.js
+│   └── tailwind.config.js
+├── .github/workflows/ci.yml
+├── docker-compose.yml
+└── README.md
+```
+
+## License
+
+Proprietary - JurystAi Project
 
 ---
 
-**Создано для JurystAi SaaS | Казахстан** 🇰🇿
+**JurystAi** - Making Kazakhstan legislation accessible. 🇰🇿 ⚖️
