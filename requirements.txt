@@ -28,7 +28,7 @@ requests==2.31.0
 python-dotenv==1.0.0
 httpx==0.26.0
 aiofiles==23.2.1
-pydantic-extra-types==2.4.2
+pydantic-extra-types==2.11.1
 
 # Monitoring & Logging
 python-json-logger==2.0.7
