@@ -1,41 +1,26 @@
+"""Configuration module for JurystAi backend"""
+import os
 from pydantic_settings import BaseSettings
-from functools import lru_cache
-from typing import List
 
 class Settings(BaseSettings):
-    # Supabase
-    supabase_url: str = "https://your-project.supabase.co"
-    supabase_key: str = "your-anon-key"
-    
-    # API Keys (заполнять через env vars!)
-    groq_api_key: str = ""
-    gemini_api_key: str = ""
-    hf_api_token: str = ""
-    
-    # Security
-    secret_key: str = "change-me-in-production-min-32-chars!!!"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
-    
-    # CORS
-    cors_origins: List[str] = ["*"]
-    
-    # Monetization
-    kaspi_phone: str = "+77017891857"
-    kaspi_cardholder: str = "Администратор JuristAI"
-    premium_price_kzt: int = 5000
-    
-    # Admin credentials
-    admin_username_1: str = "admin1"
-    admin_password_1: str = "change-me-1"
-    admin_username_2: str = "admin2"
-    admin_password_2: str = "change-me-2"
+    ENV: str = os.getenv("ENV", "development")
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://localhost/juristai")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GOOGLE_GENAI_API_KEY: str = os.getenv("GOOGLE_GENAI_API_KEY", "")
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://juristai.site").split(",")
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", 8000))
+    WORKERS: int = int(os.getenv("WORKERS", 4))
     
     class Config:
         env_file = ".env"
-        case_sensitive = False
+        case_sensitive = True
 
-@lru_cache()
-def get_settings() -> Settings:
-    """Получить настройки (кэшируется)."""
-    return Settings()
+settings = Settings()

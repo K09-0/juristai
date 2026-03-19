@@ -1,39 +1,38 @@
-from supabase import create_client, Client
-from typing import Optional
-import structlog
+"""Database connection and session management"""
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import QueuePool
+import logging
+from app.config import settings
 
-from app.config import get_settings
+logger = logging.getLogger(__name__)
 
-logger = structlog.get_logger()
+engine = create_engine(
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,
+    poolclass=QueuePool,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
 
-class DatabaseError(Exception):
-    """Кастомное исключение для ошибок БД."""
-    pass
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
 
-_supabase_client: Optional[Client] = None
+def init_db():
+    """Initialize database tables"""
+    from app.models import Base
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables initialized")
 
-def get_supabase_client() -> Client:
-    """Получить или создать клиент Supabase."""
-    global _supabase_client
-    
-    if _supabase_client is None:
-        settings = get_settings()
-        _supabase_client = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        logger.info("supabase_client_initialized")
-    
-    return _supabase_client
-
-async def check_database_connection() -> bool:
-    """Проверка подключения к БД."""
+def get_db_session() -> Session:
+    """Get database session"""
+    db = SessionLocal()
     try:
-        client = get_supabase_client()
-        # Простой запрос для проверки
-        result = client.table("legal_documents").select("count", count="exact").limit(1).execute()
-        logger.info("database_connection_ok", documents_count=result.count)
-        return True
-    except Exception as e:
-        logger.error("database_connection_failed", error=str(e))
-        return False
+        yield db
+    finally:
+        db.close()
