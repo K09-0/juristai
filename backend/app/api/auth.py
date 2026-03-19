@@ -1,130 +1,161 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from supabase import Client
-from typing import Optional
-import structlog
+from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
+from app.db.database import get_db
+from app.db.models import User
+from app.core.security import (
+    create_tokens, verify_password, get_password_hash, verify_token
+)
+import logging
 
-from app.database import get_supabase_client
-from app.config import get_settings
-
-logger = structlog.get_logger()
-router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
+router = APIRouter()
 security = HTTPBearer()
 
-@router.post("/register")
-async def register(email: str, password: str, full_name: Optional[str] = None):
-    """Регистрация нового пользователя."""
-    try:
-        supabase = get_supabase_client()
-        auth_response = supabase.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {
-                "data": {
-                    "full_name": full_name or email.split('@')[0]
-                }
-            }
-        })
-        
-        if auth_response.user:
-            logger.info("user_registered", user_id=auth_response.user.id, email=email)
-            return {
-                "success": True,
-                "user_id": auth_response.user.id,
-                "email": auth_response.user.email,
-                "message": "Регистрация успешна. Проверьте email для подтверждения."
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Ошибка регистрации")
-            
-    except Exception as e:
-        logger.error("registration_failed", error=str(e), email=email)
-        raise HTTPException(status_code=400, detail=f"Ошибка регистрации: {str(e)}")
+class UserRegister(BaseModel):
+    email: EmailStr
+    password: str
+    username: str
+    full_name: str = None
 
-@router.post("/login")
-async def login(email: str, password: str):
-    """Вход пользователя."""
-    try:
-        supabase = get_supabase_client()
-        auth_response = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
-        
-        if auth_response.session:
-            logger.info("user_logged_in", user_id=auth_response.user.id)
-            return {
-                "success": True,
-                "access_token": auth_response.session.access_token,
-                "refresh_token": auth_response.session.refresh_token,
-                "user": {
-                    "id": auth_response.user.id,
-                    "email": auth_response.user.email,
-                    "full_name": auth_response.user.user_metadata.get("full_name", "")
-                }
-            }
-        else:
-            raise HTTPException(status_code=401, detail="Неверные учетные данные")
-            
-    except Exception as e:
-        logger.error("login_failed", error=str(e), email=email)
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
 
-@router.post("/refresh")
-async def refresh_token(refresh_token: str):
-    """Обновление токена."""
-    try:
-        supabase = get_supabase_client()
-        auth_response = supabase.auth.refresh_session(refresh_token)
-        
-        return {
-            "success": True,
-            "access_token": auth_response.session.access_token,
-            "refresh_token": auth_response.session.refresh_token
-        }
-    except Exception as e:
-        logger.error("token_refresh_failed", error=str(e))
-        raise HTTPException(status_code=401, detail="Невалидный refresh token")
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
 
-@router.get("/me")
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Получить текущего пользователя."""
-    try:
-        supabase = get_supabase_client()
-        user = supabase.auth.get_user(credentials.credentials)
-        
-        if user:
-            profile = supabase.table("users").select("*").eq("id", user.user.id).single().execute()
-            return {
-                "id": user.user.id,
-                "email": user.user.email,
-                "full_name": user.user.user_metadata.get("full_name", ""),
-                "is_premium": profile.data.get("is_premium", False) if profile.data else False,
-                "daily_requests": profile.data.get("daily_requests_count", 0) if profile.data else 0
-            }
-        else:
-            raise HTTPException(status_code=401, detail="Не авторизован")
-    except Exception as e:
-        logger.error("get_user_failed", error=str(e))
-        raise HTTPException(status_code=401, detail="Не авторизован")
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    full_name: str
+    is_active: bool
 
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[str]:
-    """Dependency для получения ID пользователя."""
-    try:
-        supabase = get_supabase_client()
-        user = supabase.auth.get_user(credentials.credentials)
-        return user.user.id if user else None
-    except:
-        return None
+@router.post("/register", response_model=UserResponse, status_code=201)
+async def register(user: UserRegister, db: Session = Depends(get_db)):
+    """Регистрация нового пользователя"""
+    
+    # Проверяем что email не занят
+    existing_user = db.query(User).filter(User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email уже зарегистрирован"
+        )
+    
+    # Проверяем username
+    existing_username = db.query(User).filter(User.username == user.username).first()
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username уже занят"
+        )
+    
+    # Создаём пользователя
+    db_user = User(
+        email=user.email,
+        username=user.username,
+        full_name=user.full_name,
+        hashed_password=get_password_hash(user.password)
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    logger.info(f"New user registered: {user.email}")
+    
+    return {
+        "id": db_user.id,
+        "email": db_user.email,
+        "username": db_user.username,
+        "full_name": db_user.full_name,
+        "is_active": db_user.is_active
+    }
 
-async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    """Dependency для обязательной авторизации."""
-    try:
-        supabase = get_supabase_client()
-        user = supabase.auth.get_user(credentials.credentials)
-        if not user:
-            raise HTTPException(status_code=401, detail="Не авторизован")
-        return user.user.id
-    except Exception as e:
-        logger.error("auth_required_failed", error=str(e))
-        raise HTTPException(status_code=401, detail="Не авторизован")
+@router.post("/login", response_model=TokenResponse)
+async def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    """Вход пользователя"""
+    
+    # Находим пользователя
+    user = db.query(User).filter(User.email == credentials.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверные учётные данные"
+        )
+    
+    # Проверяем пароль
+    if not verify_password(credentials.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверные учётные данные"
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь неактивен"
+        )
+    
+    # Создаём токены
+    tokens = create_tokens({"sub": user.email, "user_id": user.id})
+    
+    logger.info(f"User logged in: {user.email}")
+    
+    return tokens
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(credentials: HTTPAuthCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Обновление access token по refresh token"""
+    
+    token = credentials.credentials
+    payload = verify_token(token)
+    
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный refresh token"
+        )
+    
+    user_email = payload.get("sub")
+    user = db.query(User).filter(User.email == user_email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден"
+        )
+    
+    # Создаём новые токены
+    tokens = create_tokens({"sub": user.email, "user_id": user.id})
+    
+    logger.info(f"Token refreshed for: {user.email}")
+    
+    return tokens
+
+async def get_current_user(credentials: HTTPAuthCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Зависимость для получения текущего пользователя"""
+    
+    token = credentials.credentials
+    payload = verify_token(token)
+    
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный токен"
+        )
+    
+    user_email = payload.get("sub")
+    user = db.query(User).filter(User.email == user_email).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден"
+        )
+    
+    return user
