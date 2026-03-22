@@ -30,13 +30,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS настройка
+# CORS настройка для juristai.site
+CORS_ALLOWED_ORIGINS = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,https://juristai.site,https://www.juristai.site,https://api.juristai.site"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: изменить на конкретные домены в продакшене
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Client-Info", "Apikey"],
 )
 
 # Включаем роуты
